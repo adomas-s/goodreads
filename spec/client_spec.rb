@@ -2,23 +2,66 @@ require 'spec_helper'
 require 'oauth'
 
 describe 'Client' do
-  let(:client)  { Goodreads::Client.new(:api_key => 'SECRET_KEY') }
+  let(:client)  { Goodreads.new(api_key: 'SECRET_KEY') }
   before(:each) { Goodreads.reset_configuration }
 
   describe '#new' do
-    it 'requires an argument' do
-      expect { Goodreads::Client.new(nil) }.
-        to raise_error ArgumentError, "Options hash required."
+    context 'config passed before, no arguments' do
+      let(:client) { Goodreads::Client.new }
+      before(:each) do
+        Goodreads.new(api_key: 'FOO')
+      end
+      it 'generally works' do
+        expect { client }.to_not raise_error
+      end
+      it 'has the configuration' do
+        client
+        expect(Goodreads.configuration.api_key).to eql('FOO')
+      end
+    end
+    context 'config passed before, new config arguments' do
+      let(:client) { Goodreads::Client.new(api_key: 'BAR') }
+      before(:each) do
+        Goodreads.new(api_key: 'FOO')
+      end
+      it 'generally works' do
+        expect { client }.to_not raise_error
+      end
+      it 'has the overrided configuration' do
+        client
+        expect(Goodreads.configuration.api_key).to eql('BAR')
+      end
+    end
+    context 'direct call with arguments' do
+      let(:client) { Goodreads::Client.new(api_key: 'ZOO') }
+      it 'generally works' do
+        expect { client }.to_not raise_error
+      end
+      it 'has the configuration' do
+        client
+        expect(Goodreads.configuration.api_key).to eql('ZOO')
+      end
+    end
+    context 'direct call, no arguments' do
+      let(:client) { Goodreads::Client.new }
+      it 'raises an error' do
+        expect { client }.to raise_error(Goodreads::ConfigurationError, 'Options hash required.')
+      end
     end
 
-    it 'requires a hash argument' do
-      expect { Goodreads::Client.new('foo') }.
-        to raise_error ArgumentError, "Options hash required."
+    it 'raises Goodreads::Unauthorized if API key is not valid' do
+      client = Goodreads::Client.new(api_key: 'INVALID_KEY')
+
+      stub_request(:get, 'http://www.goodreads.com/book/isbn?format=xml&isbn=054748250711&key=INVALID_KEY')
+        .to_return(status: 401)
+
+      expect { client.book_by_isbn('054748250711') }
+        .to raise_error(Goodreads::Unauthorized)
     end
   end
 
   describe '#book_by_isbn' do
-    before { stub_with_key_get('/book/isbn', {:isbn => '0307463745'}, 'book.xml') }
+    before { stub_with_key_get('/book/isbn', { isbn: '0307463745' }, 'book.xml') }
 
     it 'returns a book by isbn' do
       book = client.book_by_isbn('0307463745')
@@ -29,8 +72,8 @@ describe 'Client' do
 
     context 'when book does not exist' do
       before do
-        stub_request(:get, "http://www.goodreads.com/book/isbn?format=xml&isbn=123456789&key=SECRET_KEY").
-          to_return(:status => 404, :body => "", :headers => {}) 
+        stub_request(:get, 'http://www.goodreads.com/book/isbn?format=xml&isbn=123456789&key=SECRET_KEY')
+          .to_return(status: 404, body: '', headers: {})
       end
 
       it 'raises Goodreads::NotFound' do
@@ -40,7 +83,7 @@ describe 'Client' do
   end
 
   describe '#search_books' do
-    before { stub_with_key_get('/search/index', {:q => 'Rework'}, 'search_books_by_name.xml') }
+    before { stub_with_key_get('/search/index', { q: 'Rework' }, 'search_books_by_name.xml') }
 
     it 'returns book search results' do
       result = client.search_books('Rework')
@@ -57,7 +100,7 @@ describe 'Client' do
   end
 
   describe '#book' do
-    before { stub_with_key_get('/book/show', {:id => '6732019'}, 'book.xml') }
+    before { stub_with_key_get('/book/show', { id: '6732019' }, 'book.xml') }
 
     it 'returns a book by goodreads id' do
       expect { client.book('6732019') }.not_to raise_error
@@ -65,7 +108,7 @@ describe 'Client' do
   end
 
   describe '#book_by_title' do
-    before { stub_with_key_get('/book/title', {:title => 'Rework'}, 'book.xml') }
+    before { stub_with_key_get('/book/title', { title: 'Rework' }, 'book.xml') }
 
     it 'returns a book by title' do
       expect { client.book_by_title('Rework') }.not_to raise_error
@@ -85,9 +128,9 @@ describe 'Client' do
 
     context 'with :skip_cropped => true' do
       before { stub_with_key_get('/review/recent_reviews', {}, 'recent_reviews.xml') }
-  
+
       it 'returns only full reviews' do
-        reviews = client.recent_reviews(:skip_cropped => true)
+        reviews = client.recent_reviews(skip_cropped: true)
         reviews.should be_an Array
         reviews.should_not be_empty
       end
@@ -95,7 +138,7 @@ describe 'Client' do
   end
 
   describe '#review' do
-    before { stub_with_key_get('/review/show', {:id => '166204831'}, 'review.xml') }
+    before { stub_with_key_get('/review/show', { id: '166204831' }, 'review.xml') }
 
     it 'returns review details' do
       review = client.review('166204831')
@@ -106,8 +149,8 @@ describe 'Client' do
 
     context 'when review does not exist' do
       before do
-        stub_request(:get, "http://www.goodreads.com/review/show?format=xml&id=12345&key=SECRET_KEY").
-          to_return(:status => 404, :body => "", :headers => {})
+        stub_request(:get, 'http://www.goodreads.com/review/show?format=xml&id=12345&key=SECRET_KEY')
+          .to_return(status: 404, body: '', headers: {})
       end
 
       it 'raises Goodreads::NotFound' do
@@ -121,7 +164,7 @@ describe 'Client' do
     let(:user_id) { '5076380' }
     let(:shelf) { 'to-read' }
 
-    before { stub_with_key_get('/review/list', {:v => '2', :id => user_id, :shelf => shelf}, response_fixture) }
+    before { stub_with_key_get('/review/list', { v: '2', id: user_id, shelf: shelf }, response_fixture) }
     let(:response_fixture) { 'reviews.xml' }
 
     it 'returns a list of reviews' do
@@ -143,8 +186,8 @@ describe 'Client' do
 
     context 'when user does not exist' do
       before do
-        stub_request(:get, "http://www.goodreads.com/review/list?v=2&format=xml&id=#{user_id}&key=SECRET_KEY&shelf=#{shelf}").
-          to_return(:status => 404, :body => "", :headers => {})
+        stub_request(:get, "http://www.goodreads.com/review/list?v=2&format=xml&id=#{user_id}&key=SECRET_KEY&shelf=#{shelf}")
+          .to_return(status: 404, body: '', headers: {})
       end
 
       it 'raises Goodreads::NotFound' do
@@ -166,7 +209,7 @@ describe 'Client' do
       author.fans_count.should eq 109
       author.image_url.should eq 'http://photo.goodreads.com/authors/1199698411p5/18541.jpg'
       author.small_image_url.should eq 'http://photo.goodreads.com/authors/1199698411p2/18541.jpg'
-      author.about.should eq '' 
+      author.about.should eq ''
       author.influences.should eq ''
       author.works_count.should eq '34'
       author.gender.should eq 'male'
@@ -303,7 +346,7 @@ describe 'Client' do
 
     it "returns group details" do
       group = client.group('1')
-    
+
       group.should be_a Hashie::Mash
       group.id.should eq '1'
       group.title.should eq 'Goodreads Feedback'

@@ -14,26 +14,22 @@ module Goodreads
     # path   - Request path
     # params - Parameters hash
     #
-    def request(path, params={})
-      token = api_key || Goodreads.configuration[:api_key]
+    def request(path, params = {})
+      raise Goodreads::ConfigurationError, 'API key required.' if api_key.nil?
 
-      if token.nil?
-        raise Goodreads::ConfigurationError, 'API key required.'
-      end
-
-      params.merge!(:format => API_FORMAT, :key => token)
+      params.merge!(format: API_FORMAT, key: api_key)
       url = "#{API_URL}#{path}"
 
-      resp = RestClient.get(url, :params => params) do |response, request, result, &block|
+      resp = RestClient.get(url, params: params) do |response, request, result, &block|
         case response.code
-          when 200
-            response.return!(request, result, &block)
-          when 401
-            raise Goodreads::Unauthorized
-          when 403
-            raise Goodreads::Forbidden
-          when 404
-            raise Goodreads::NotFound
+        when 200
+          response.return!(request, result, &block)
+        when 401
+          raise Goodreads::Unauthorized
+        when 403
+          raise Goodreads::Forbidden
+        when 404
+          raise Goodreads::NotFound
         end
       end
 
@@ -64,6 +60,12 @@ module Goodreads
       hash = Hash.from_xml(resp.body)['GoodreadsResponse']
       hash.delete('Request')
       hash
+    end
+
+    private
+
+    def api_key
+      Goodreads.configuration.api_key
     end
   end
 end

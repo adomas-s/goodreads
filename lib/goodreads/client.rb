@@ -1,3 +1,4 @@
+require 'pry'
 require 'goodreads/client'
 require 'goodreads/client/books'
 require 'goodreads/client/reviews'
@@ -20,22 +21,29 @@ module Goodreads
     include Goodreads::Groups
     include Goodreads::Friends
 
-    attr_reader :api_key, :api_secret, :oauth_token
+    # attr_reader :api_key, :api_secret, :oauth_token
 
     # Initialize a Goodreads::Client instance
     #
-    # options[:api_key]     - Account API key
-    # options[:api_secret]  - Account API secret
     # options[:oauth_token] - OAuth access token (optional, required for some calls)
     #
-    def initialize(options={})
-      unless options.kind_of?(Hash)
-        raise ArgumentError, "Options hash required."
+    def initialize(options = nil)
+      if options
+        Goodreads.new(options)
+      else
+        validate_configuration
+        # @oauth_token = options[:oauth_token]
       end
+    end
 
-      @api_key    = options[:api_key] || Goodreads.configuration[:api_key]
-      @api_secret = options[:api_secret] || Goodreads.configuration[:api_secret]
-      @oauth_token = options[:oauth_token]
+    private
+
+    def validate_configuration
+      raise Goodreads::ConfigurationError, 'Options hash required.' if configuration_empty?
+    end
+
+    def configuration_empty?
+      Goodreads.configuration.nil? || Goodreads.configuration.empty?
     end
   end
 end
